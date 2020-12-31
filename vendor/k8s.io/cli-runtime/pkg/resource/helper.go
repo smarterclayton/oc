@@ -18,6 +18,7 @@ package resource
 
 import (
 	"context"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,6 +35,8 @@ var metadataAccessor = meta.NewAccessor()
 type Helper struct {
 	// The name of this resource as the server would recognize it
 	Resource string
+	// The path segments of a subresource (multiple segments after the name), if set
+	SubResource []string
 	// A RESTClient capable of mutating this resource.
 	RESTClient RESTClient
 	// True if the resource type is scoped to namespaces
@@ -74,11 +77,19 @@ func (m *Helper) WithFieldManager(fieldManager string) *Helper {
 	return m
 }
 
+func (m *Helper) WithSubResourcePath(subresourcePath string) *Helper {
+	if len(subresourcePath) > 0 {
+		m.SubResource = strings.Split(subresourcePath, "/")
+	}
+	return m
+}
+
 func (m *Helper) Get(namespace, name string) (runtime.Object, error) {
 	req := m.RESTClient.Get().
 		NamespaceIfScoped(namespace, m.NamespaceScoped).
 		Resource(m.Resource).
-		Name(name)
+		Name(name).
+		SubResource(m.SubResource...)
 	return req.Do(context.TODO()).Get()
 }
 
@@ -127,6 +138,7 @@ func (m *Helper) DeleteWithOptions(namespace, name string, options *metav1.Delet
 		NamespaceIfScoped(namespace, m.NamespaceScoped).
 		Resource(m.Resource).
 		Name(name).
+		SubResource(m.SubResource...).
 		Body(options).
 		Do(context.TODO()).
 		Get()
@@ -164,11 +176,16 @@ func (m *Helper) CreateWithOptions(namespace string, modify bool, obj runtime.Ob
 }
 
 func (m *Helper) createResource(c RESTClient, resource, namespace string, obj runtime.Object, options *metav1.CreateOptions) (runtime.Object, error) {
-	return c.Post().
+	req := c.Post().
 		NamespaceIfScoped(namespace, m.NamespaceScoped).
 		Resource(resource).
 		VersionedParams(options, metav1.ParameterCodec).
-		Body(obj).
+		Body(obj)
+	if len(m.SubResource) > 0 {
+		// TODO: needs name for subresource
+		req.SubResource(m.SubResource...)
+	}
+	return req.
 		Do(context.TODO()).
 		Get()
 }
@@ -186,6 +203,7 @@ func (m *Helper) Patch(namespace, name string, pt types.PatchType, data []byte, 
 		NamespaceIfScoped(namespace, m.NamespaceScoped).
 		Resource(m.Resource).
 		Name(name).
+		SubResource(m.SubResource...).
 		VersionedParams(options, metav1.ParameterCodec).
 		Body(data).
 		Do(context.TODO()).
@@ -232,6 +250,7 @@ func (m *Helper) replaceResource(c RESTClient, resource, namespace, name string,
 		NamespaceIfScoped(namespace, m.NamespaceScoped).
 		Resource(resource).
 		Name(name).
+		SubResource(m.SubResource...).
 		VersionedParams(options, metav1.ParameterCodec).
 		Body(obj).
 		Do(context.TODO()).

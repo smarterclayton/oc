@@ -69,6 +69,8 @@ type EditOptions struct {
 
 	EditMode EditMode
 
+	SubResourcePath string
+
 	CmdNamespace    string
 	ApplyAnnotation bool
 	ChangeCause     string
@@ -560,7 +562,7 @@ func (o *EditOptions) annotationPatch(update *resource.Info) error {
 	if err != nil {
 		return err
 	}
-	helper := resource.NewHelper(client, mapping).WithFieldManager(o.FieldManager)
+	helper := resource.NewHelper(client, mapping).WithFieldManager(o.FieldManager).WithSubResourcePath(o.SubResourcePath)
 	_, err = helper.Patch(o.CmdNamespace, update.Name, patchType, patch, nil)
 	if err != nil {
 		return err
@@ -693,6 +695,7 @@ func (o *EditOptions) visitToPatch(originalInfos []*resource.Info, patchVisitor 
 
 		patched, err := resource.NewHelper(info.Client, info.Mapping).
 			WithFieldManager(o.FieldManager).
+			WithSubResourcePath(o.SubResourcePath).
 			Patch(info.Namespace, info.Name, patchType, patch, nil)
 		if err != nil {
 			fmt.Fprintln(o.ErrOut, results.addError(err, info))
